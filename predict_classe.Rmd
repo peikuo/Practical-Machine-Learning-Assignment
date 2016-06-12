@@ -1,0 +1,90 @@
+Predict the manner in which they did the exercise
+========================================================
+
+## Load And CLean Training Data
+```{r opts_chunk$set(cache=TRUE)}
+library("caret")
+
+set.seed(336)
+
+training = read.csv("pml-training.csv", na.strings=c("","NA"))
+
+training$classe = factor(training$classe)
+
+mean(is.na(training))
+```
+
+Looks some columns has many NA value, Let's look at the NA percentage distribution
+
+```{r}
+ISNA <- function(X){mean(is.na(X))}
+na_percentage <- apply(training, 2, ISNA)
+data_na_p <- data.frame(as.list(na_percentage))
+data_na_p <- data.frame(t(data_na_p))
+colnames(data_na_p) <- c("p")
+ggplot(data_na_p, aes(x=p)) + geom_histogram(binwidth=.1) + xlab("Percentage of NA Value On Each Column") + ylab("Count") + geom_density() + scale_x_continuous(breaks=seq(0, 1, by=0.1))
+```
+
+So we drop the columns that NA value percentage bigger than 0.2, these columns looks meanless for predicting
+```{r}
+training_rowname <- names(na_percentage[na_percentage < 0.2])
+
+training_data <- training[training_rowname]
+```
+
+Also we drop 'X' and 'username' column for it is useless for predicting. and 'cvdt_timestampe' is duplicated with 'raw_timestamp_part1' and 'raw_timestamp_part2', drop it too.
+
+```{r}
+training_data <- training_data[, -c(1,2,5)]
+```
+## Split Training and Validation Data
+We split training data 20% for training, 80% for testing, for my computer is very slow on training, sigh.
+
+```{r}
+splitIndex <- createDataPartition(y = training_data$classe, p = 0.2, list = FALSE)
+train_for_train <- training_data[splitIndex, ]  
+train_for_validation <- training_data[-splitIndex, ]
+```
+
+## Build Predict Model
+
+Create Three Predict Model
+1. Decision Tree
+2. Linear Discriminant
+3. Boosted Regression
+
+```{r}
+rpart_model <- train(classe~., data=train_for_train, method="rpart")
+lda_model <- train(classe~., data=train_for_train, method="lda")
+gbm_model <- train(classe~., data=train_for_train, method="gbm")
+```
+
+Validate Model, Get Predict Result And Calulate Accuracy
+```{r}
+rpart_predict <- predict(rpart_model, train_for_validation)
+lda_predict <- predict(lda_model, train_for_validation)
+gbm_predict <- predict(gbm_model, train_for_validation)
+```
+
+Decision Tree
+```{r}
+confusionMatrix(rpart_predict, train_for_validation$classe)
+```
+
+Linear Discriminant
+```{r}
+confusionMatrix(lda_predict, train_for_validation$classe)
+```
+
+Boosted Regression
+```{r}
+confusionMatrix(gbm_predict, train_for_validation$classe)
+```
+
+Boosted Regression have the best Accuracy, I will choose this for predicting testing data set
+
+##Predict On The Testing Data
+```{r}
+testing = read.csv("pml-testing.csv", na.strings=c("","NA"))
+predict(gbm_model, testing)
+```
